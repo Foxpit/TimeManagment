@@ -21,6 +21,7 @@ import java.util.Random;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
+import org.jfree.chart.plot.PiePlot;
 import org.jfree.chart.plot.PlotOrientation; // Import for PlotOrientation
 import org.jfree.chart.renderer.category.BarRenderer;
 import org.jfree.data.category.DefaultCategoryDataset;
@@ -37,7 +38,9 @@ public class TimeTracker extends JFrame {
     private Map<String, Long> taskDurations = new HashMap<>();
     private Random random = new Random(); // For generating random colors
     private JTextArea historyArea; // For displaying task history
+    private Map<String, Color> taskColors = new HashMap<>();
 
+    private JFreeChart pieChart; // Declare pieChart as a class member
     private JFreeChart barChart;
 
     public TimeTracker() {
@@ -107,8 +110,8 @@ public class TimeTracker extends JFrame {
         ChartPanel barChartPanel = new ChartPanel(barChart);
 
         // Customize the renderer for color variation
-        BarRenderer renderer = (BarRenderer) barChart.getCategoryPlot().getRenderer();
-        renderer.setSeriesPaint(0, new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
+        // BarRenderer renderer = (BarRenderer) barChart.getCategoryPlot().getRenderer();
+        // renderer.setSeriesPaint(0, new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, pieChartPanel, barChartPanel);
         splitPane.setResizeWeight(0.5);
@@ -161,7 +164,7 @@ public class TimeTracker extends JFrame {
             JOptionPane.showMessageDialog(this, "Please enter a task name.", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
-
+    
         long durationSeconds;
         if (startTime != null) {
             durationSeconds = Duration.between(startTime, LocalTime.now()).getSeconds();
@@ -180,44 +183,32 @@ public class TimeTracker extends JFrame {
                 return;
             }
         }
-
+    
         taskDurations.merge(taskName, durationSeconds, Long::sum);
         pieDataset.setValue(taskName, taskDurations.get(taskName));
         barDataset.setValue(taskDurations.get(taskName), "Time Spent", taskName);
-
-        // Dropdown update logic - prevent duplicate entries
+    
+            // Dropdown update logic - prevent duplicate entries
         if (!arrayContains(taskNameDropdown, taskName)) {
             taskNameDropdown.addItem(taskName);
         }
 
-        // Check if the task already has a color assigned
-        int taskIndex = -1;
-        for (int i = 0; i < barDataset.getRowCount(); i++) {
-            if (taskName.equals(barDataset.getColumnKey(i))) {
-                taskIndex = i;
-                break;
-            }
-        }
+        // Assign a color to the new task
+        Color taskColor = taskColors.computeIfAbsent(taskName, k -> 
+            new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
 
-        // Assign a constant color to the task if it doesn't have a color assigned
-        Color taskColor = new Color(0, 128, 0); // Change the RGB values to the desired color
-        if (taskIndex == -1) {
-            taskIndex = barDataset.getRowCount(); // Assign the next available index
-            barDataset.addValue(taskDurations.get(taskName), "Time Spent", taskName);
-            BarRenderer renderer = (BarRenderer) barChart.getCategoryPlot().getRenderer();
-            renderer.setSeriesPaint(taskIndex, taskColor);
-        }
-
-        // Update the value and color of the task in the bar chart
-        barDataset.setValue(taskDurations.get(taskName), "Time Spent", taskName);
-        BarRenderer renderer = (BarRenderer) barChart.getCategoryPlot().getRenderer();
-        renderer.setSeriesPaint(taskIndex, taskColor);
+        // Update datasets and chart colors
+        updateDatasets(taskName, durationSeconds);
+        updateChartColors();
 
         // Update history area
         historyArea.append("Task: " + taskName + ", Duration: " + formatDuration(durationSeconds) + "\n");
+    }
 
-        // Update color for each task
-        updateChartColors();
+    private void updateDatasets(String taskName, long durationSeconds) {
+        taskDurations.merge(taskName, durationSeconds, Long::sum);
+        pieDataset.setValue(taskName, taskDurations.get(taskName));
+        barDataset.setValue(taskDurations.get(taskName), "Time Spent", taskName);
     }
 
     private boolean arrayContains(JComboBox<String> comboBox, String item) {
@@ -228,7 +219,7 @@ public class TimeTracker extends JFrame {
         }
         return false;
     }
-
+    
     private String formatDuration(long durationSeconds) {
         // Converts duration to hours, minutes, and seconds format
         long hours = durationSeconds / 3600;
@@ -238,18 +229,25 @@ public class TimeTracker extends JFrame {
     }
 
     private void updateChartColors() {
-        BarRenderer renderer = (BarRenderer) barChart.getCategoryPlot().getRenderer();
-        for (int i = 0; i < barDataset.getRowCount(); i++) {
-            Comparable<?> taskName = barDataset.getColumnKey(i);
-            if (renderer.getSeriesPaint(i) == null) {
-                // Assign a new color to the task if it doesn't have a color assigned
-                renderer.setSeriesPaint(i, new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
-            } else {
-                // Keep the previously defined color for the task
-                renderer.setSeriesPaint(i, renderer.getSeriesPaint(i));
+        BarRenderer barRenderer = (BarRenderer) barChart.getCategoryPlot().getRenderer();
+        PiePlot piePlot = (PiePlot) pieChart.getPlot();
+    
+        // Reset series colors for bar chart
+        barRenderer.clearSeriesPaints(false);
+    
+        // Iterate through each task and set its color in both charts
+        taskDurations.keySet().forEach(taskName -> {
+            Color color = taskColors.get(taskName);
+            if (color != null) {
+                int seriesIndex = barDataset.getColumnIndex(taskName);
+                barRenderer.setSeriesPaint(seriesIndex, color); // Set color for each task in the bar chart
+                piePlot.setSectionPaint(taskName, color); // Set color for each task in the pie chart
             }
-        }
+        });
     }
+    
+    
+
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
