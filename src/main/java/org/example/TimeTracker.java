@@ -168,13 +168,13 @@ public class TimeTracker extends JFrame {
             startTime = null; // Reset start time after stopping the timer
         } else {
             try {
-                LocalTime startTime = LocalTime.parse(startTimeField.getText().trim(), DateTimeFormatter.ofPattern("HH:mm"));
-                LocalTime endTime = LocalTime.parse(endTimeField.getText().trim(), DateTimeFormatter.ofPattern("HH:mm"));
-                if (endTime.isBefore(startTime)) {
+                LocalTime parsedStartTime = LocalTime.parse(startTimeField.getText().trim(), DateTimeFormatter.ofPattern("HH:mm"));
+                LocalTime parsedEndTime = LocalTime.parse(endTimeField.getText().trim(), DateTimeFormatter.ofPattern("HH:mm"));
+                if (parsedEndTime.isBefore(parsedStartTime)) {
                     JOptionPane.showMessageDialog(this, "End time cannot be before start time.", "Error", JOptionPane.ERROR_MESSAGE);
                     return;
                 }
-                durationSeconds = Duration.between(startTime, endTime).getSeconds();
+                durationSeconds = Duration.between(parsedStartTime, parsedEndTime).getSeconds();
             } catch (DateTimeParseException ex) {
                 JOptionPane.showMessageDialog(this, "Invalid time format. Please enter time as HH:MM", "Format Error", JOptionPane.ERROR_MESSAGE);
                 return;
@@ -189,8 +189,29 @@ public class TimeTracker extends JFrame {
         if (!arrayContains(taskNameDropdown, taskName)) {
             taskNameDropdown.addItem(taskName);
         }
+
+        // Check if the task already has a color assigned
+        int taskIndex = -1;
+        for (int i = 0; i < barDataset.getRowCount(); i++) {
+            if (taskName.equals(barDataset.getColumnKey(i))) {
+                taskIndex = i;
+                break;
+            }
+        }
+
+        // Assign a constant color to the task if it doesn't have a color assigned
+        Color taskColor = new Color(0, 128, 0); // Change the RGB values to the desired color
+        if (taskIndex == -1) {
+            taskIndex = barDataset.getRowCount(); // Assign the next available index
+            barDataset.addValue(taskDurations.get(taskName), "Time Spent", taskName);
+            BarRenderer renderer = (BarRenderer) barChart.getCategoryPlot().getRenderer();
+            renderer.setSeriesPaint(taskIndex, taskColor);
+        }
+
+        // Update the value and color of the task in the bar chart
+        barDataset.setValue(taskDurations.get(taskName), "Time Spent", taskName);
         BarRenderer renderer = (BarRenderer) barChart.getCategoryPlot().getRenderer();
-        renderer.setSeriesPaint(barDataset.getRowCount() - 1, new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
+        renderer.setSeriesPaint(taskIndex, taskColor);
 
         // Update history area
         historyArea.append("Task: " + taskName + ", Duration: " + formatDuration(durationSeconds) + "\n");
@@ -219,7 +240,14 @@ public class TimeTracker extends JFrame {
     private void updateChartColors() {
         BarRenderer renderer = (BarRenderer) barChart.getCategoryPlot().getRenderer();
         for (int i = 0; i < barDataset.getRowCount(); i++) {
-            renderer.setSeriesPaint(i, new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
+            Comparable<?> taskName = barDataset.getColumnKey(i);
+            if (renderer.getSeriesPaint(i) == null) {
+                // Assign a new color to the task if it doesn't have a color assigned
+                renderer.setSeriesPaint(i, new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
+            } else {
+                // Keep the previously defined color for the task
+                renderer.setSeriesPaint(i, renderer.getSeriesPaint(i));
+            }
         }
     }
 
