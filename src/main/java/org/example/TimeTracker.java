@@ -30,18 +30,20 @@ import org.jfree.data.general.DefaultPieDataset;
 
 public class TimeTracker extends JFrame {
     private JComboBox<String> taskNameDropdown;
+    private JComboBox<String> taskTypeDropdown;
     private JTextField startTimeField;
     private JTextField endTimeField;
     private DefaultPieDataset pieDataset;
     private DefaultCategoryDataset barDataset;
     private LocalTime startTime;
-    private Map<String, Long> taskDurations = new HashMap<>();
-    private Random random = new Random(); // For generating random colors
-    private JTextArea historyArea; // For displaying task history
-    private Map<String, Color> taskColors = new HashMap<>();
+    private final Map<String, Long> taskDurations = new HashMap<>();
+    private JTextArea historyArea;
+    private final Map<String, Color> taskColors = new HashMap<>();
 
-    private JFreeChart pieChart; // Declare pieChart as a class member
+    private JFreeChart pieChart;
     private JFreeChart barChart;
+
+    private final Random random = new Random();
 
     public TimeTracker() {
         initializeUI();
@@ -59,18 +61,26 @@ public class TimeTracker extends JFrame {
         add(createHistoryPanel(), BorderLayout.SOUTH); // Add a history panel
     }
 
+//Menu Bar
+
     private JMenuBar createMenuBar() {
         JMenuBar menuBar = new JMenuBar();
         JMenu menu = new JMenu("Options");
         JMenuItem manualEntryItem = new JMenuItem("Manual Entry");
+        JMenuItem resetItem = new JMenuItem("Reset");
 
         manualEntryItem.addActionListener(this::handleManualEntry);
+        resetItem.addActionListener(this::handleReset);
 
+        menu.add(resetItem);
         menu.add(manualEntryItem);
         menuBar.add(menu);
         return menuBar;
     }
 
+
+
+//Input Panel
     private JPanel createInputPanel() {
         JPanel panel = new JPanel();
         taskNameDropdown = new JComboBox<>();
@@ -84,15 +94,20 @@ public class TimeTracker extends JFrame {
 
         panel.add(new JLabel("Task Name:"));
         panel.add(taskNameDropdown);
+
+        panel.add(new JLabel("Task Type:"));
+        panel.add(taskTypeDropdown);
+
         panel.add(startButton);
         panel.add(stopButton);
 
         return panel;
     }
 
+//History Panel
     private JPanel createHistoryPanel() {
         JPanel panel = new JPanel(new BorderLayout());
-        historyArea = new JTextArea(5, 40);
+        historyArea = new JTextArea(6, 40);
         historyArea.setEditable(false);
         JScrollPane scrollPane = new JScrollPane(historyArea);
         panel.add(scrollPane, BorderLayout.CENTER);
@@ -100,6 +115,8 @@ public class TimeTracker extends JFrame {
         return panel;
     }
 
+
+//Chart Panel
     private JSplitPane createChartPanel() {
         pieDataset = new DefaultPieDataset();
         JFreeChart pieChart = ChartFactory.createPieChart("Time Distribution", pieDataset, true, true, false);
@@ -119,8 +136,30 @@ public class TimeTracker extends JFrame {
         return splitPane;
     }
 
+// Update Chart Colors
+private void updateChartColors() {
+    BarRenderer barRenderer = (BarRenderer) barChart.getCategoryPlot().getRenderer();
+    PiePlot piePlot = (PiePlot) pieChart.getPlot();
+
+    // Reset series colors for bar chart
+    barRenderer.clearSeriesPaints(false);
+
+    // Iterate through each task and set its color in both charts
+    taskDurations.keySet().forEach(taskName -> {
+        // Ensure taskColors contains a color for each task to avoid NullPointerException
+
+        taskColors.putIfAbsent(taskName, new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
+        Color color = taskColors.get(taskName);
+        if (color != null) {
+            int seriesIndex = barDataset.getColumnIndex(taskName);
+            barRenderer.setSeriesPaint(seriesIndex, color); // Set color for each task in the bar chart
+            piePlot.setSectionPaint(taskName, color); // Set color for each task in the pie chart
+        }
+    });
+}
 
 
+//Action Listeners
     private void handleStartAction(ActionEvent e) {
         String taskName = (String) taskNameDropdown.getSelectedItem();
         if (taskName == null || taskName.trim().isEmpty()) {
@@ -135,7 +174,11 @@ public class TimeTracker extends JFrame {
             JOptionPane.showMessageDialog(this, "Please start the timer before stopping.", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
-        updateTaskDuration();
+        try {
+            updateTaskDuration();
+        } finally {
+            startTime = null; // Ensure start time is reset even if exceptions occur
+        }
     }
 
     private void handleManualEntry(ActionEvent e) {
@@ -158,6 +201,17 @@ public class TimeTracker extends JFrame {
         }
     }
 
+    private void handleReset(ActionEvent e) {
+        int result = JOptionPane.showConfirmDialog(this, "Are you sure you want to reset?", "Reset", JOptionPane.OK_CANCEL_OPTION);
+        if (result == JOptionPane.OK_OPTION) {
+            taskDurations.clear();
+            pieDataset.clear();
+            barDataset.clear();
+            historyArea.setText("");
+        }
+    }
+
+//Update Task Duration
     private void updateTaskDuration() {
         String taskName = (String) taskNameDropdown.getSelectedItem();
         if (taskName == null || taskName.trim().isEmpty()) {
@@ -204,13 +258,15 @@ public class TimeTracker extends JFrame {
         // Update history area
         historyArea.append("Task: " + taskName + ", Duration: " + formatDuration(durationSeconds) + "\n");
     }
-
+//Update Datasets
     private void updateDatasets(String taskName, long durationSeconds) {
         taskDurations.merge(taskName, durationSeconds, Long::sum);
         pieDataset.setValue(taskName, taskDurations.get(taskName));
         barDataset.setValue(taskDurations.get(taskName), "Time Spent", taskName);
     }
 
+
+// Logic for checking if an item is already in the dropdown
     private boolean arrayContains(JComboBox<String> comboBox, String item) {
         for (int i = 0; i < comboBox.getItemCount(); i++) {
             if (comboBox.getItemAt(i).equalsIgnoreCase(item)) {
@@ -219,7 +275,8 @@ public class TimeTracker extends JFrame {
         }
         return false;
     }
-    
+
+// Format duration in HH:MM:SS format
     private String formatDuration(long durationSeconds) {
         // Converts duration to hours, minutes, and seconds format
         long hours = durationSeconds / 3600;
@@ -228,23 +285,6 @@ public class TimeTracker extends JFrame {
         return String.format("%02d:%02d:%02d", hours, minutes, seconds);
     }
 
-    private void updateChartColors() {
-        BarRenderer barRenderer = (BarRenderer) barChart.getCategoryPlot().getRenderer();
-        PiePlot piePlot = (PiePlot) pieChart.getPlot();
-    
-        // Reset series colors for bar chart
-        barRenderer.clearSeriesPaints(false);
-    
-        // Iterate through each task and set its color in both charts
-        taskDurations.keySet().forEach(taskName -> {
-            Color color = taskColors.get(taskName);
-            if (color != null) {
-                int seriesIndex = barDataset.getColumnIndex(taskName);
-                barRenderer.setSeriesPaint(seriesIndex, color); // Set color for each task in the bar chart
-                piePlot.setSectionPaint(taskName, color); // Set color for each task in the pie chart
-            }
-        });
-    }
     
     
 
