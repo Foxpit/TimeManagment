@@ -86,6 +86,9 @@ public class TimeTracker extends JFrame {
         taskNameDropdown = new JComboBox<>();
         taskNameDropdown.setEditable(true);
 
+        taskTypeDropdown = new JComboBox<>(); // Make sure this is initialized
+        taskTypeDropdown.setEditable(true); // Assuming you want this to be editable
+
         JButton startButton = new JButton("Start");
         JButton stopButton = new JButton("Stop");
 
@@ -104,7 +107,8 @@ public class TimeTracker extends JFrame {
         return panel;
     }
 
-//History Panel
+
+    //History Panel
     private JPanel createHistoryPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         historyArea = new JTextArea(6, 40);
@@ -117,46 +121,64 @@ public class TimeTracker extends JFrame {
 
 
 //Chart Panel
-    private JSplitPane createChartPanel() {
-        pieDataset = new DefaultPieDataset();
-        JFreeChart pieChart = ChartFactory.createPieChart("Time Distribution", pieDataset, true, true, false);
-        ChartPanel pieChartPanel = new ChartPanel(pieChart);
+private JSplitPane createChartPanel() {
+    pieDataset = new DefaultPieDataset();
+    this.pieChart = ChartFactory.createPieChart("Time Distribution", pieDataset, true, true, false); // Initialize class member
+    ChartPanel pieChartPanel = new ChartPanel(pieChart);
 
-        barDataset = new DefaultCategoryDataset();
-        barChart = ChartFactory.createBarChart("Time Spent", "Task", "Time (Seconds)", barDataset, PlotOrientation.VERTICAL, true, true, false);
-        ChartPanel barChartPanel = new ChartPanel(barChart);
+    barDataset = new DefaultCategoryDataset();
+    this.barChart = ChartFactory.createBarChart("Time Spent", "Task", "Time (Seconds)", barDataset, PlotOrientation.VERTICAL, true, true, false); // Initialize class member
+    ChartPanel barChartPanel = new ChartPanel(barChart);
 
-        // Customize the renderer for color variation
-        // BarRenderer renderer = (BarRenderer) barChart.getCategoryPlot().getRenderer();
-        // renderer.setSeriesPaint(0, new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
-
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, pieChartPanel, barChartPanel);
-        splitPane.setResizeWeight(0.5);
-        splitPane.setContinuousLayout(true);
-        return splitPane;
-    }
+    JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, pieChartPanel, barChartPanel);
+    splitPane.setResizeWeight(0.5);
+    splitPane.setContinuousLayout(true);
+    return splitPane;
+}
 
 // Update Chart Colors
 private void updateChartColors() {
+//    BarRenderer barRenderer = (BarRenderer) barChart.getCategoryPlot().getRenderer();
+//    PiePlot piePlot = (PiePlot) pieChart.getPlot();
+//
+//    taskDurations.forEach((taskName, duration) -> {
+//        // Check if a color already exists for this task, if not create a new random color
+//        Color color = taskColors.computeIfAbsent(taskName, k ->
+//                new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
+//
+//        // Update colors for pie chart
+//        piePlot.setSectionPaint(taskName, color);
+//
+//        // Ensure the task is in the bar dataset before setting the color
+//        int rowIndex = barDataset.getRowIndex(taskName);
+//        if (rowIndex >= 0) {
+//            barRenderer.setSeriesPaint(rowIndex, color);
+//        }
+//    });
+
+    //update chart colors
     BarRenderer barRenderer = (BarRenderer) barChart.getCategoryPlot().getRenderer();
     PiePlot piePlot = (PiePlot) pieChart.getPlot();
 
-    // Reset series colors for bar chart
-    barRenderer.clearSeriesPaints(false);
+    taskDurations.forEach((taskName, duration) -> {
+        // Check if a color already exists for this task, if not create a new random color
+        Color color = taskColors.computeIfAbsent(taskName, k ->
+                new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
 
-    // Iterate through each task and set its color in both charts
-    taskDurations.keySet().forEach(taskName -> {
-        // Ensure taskColors contains a color for each task to avoid NullPointerException
+        // Update colors for pie chart
+        piePlot.setSectionPaint(taskName, color);
 
-        taskColors.putIfAbsent(taskName, new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
-        Color color = taskColors.get(taskName);
-        if (color != null) {
-            int seriesIndex = barDataset.getColumnIndex(taskName);
-            barRenderer.setSeriesPaint(seriesIndex, color); // Set color for each task in the bar chart
-            piePlot.setSectionPaint(taskName, color); // Set color for each task in the pie chart
+        // Ensure the task is in the bar dataset before setting the color
+        int rowIndex = barDataset.getRowIndex(taskName);
+        if (rowIndex >= 0) {
+            barRenderer.setSeriesPaint(rowIndex, color);
         }
     });
+
 }
+
+
+
 
 
 //Action Listeners
@@ -218,46 +240,39 @@ private void updateChartColors() {
             JOptionPane.showMessageDialog(this, "Please enter a task name.", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
-    
-        long durationSeconds;
+
+        long durationSeconds = calculateDuration();
+        if (durationSeconds < 0) return;
+
+        updateDatasets(taskName, durationSeconds);
+        updateChartColors();
+        historyArea.append("Task: " + taskName + ", Duration: " + formatDuration(durationSeconds) + "\n");
+    }
+
+    // Calculate duration in seconds
+    private long calculateDuration() {
+        long durationSeconds = -1;
         if (startTime != null) {
             durationSeconds = Duration.between(startTime, LocalTime.now()).getSeconds();
-            startTime = null; // Reset start time after stopping the timer
+            startTime = null;
         } else {
             try {
                 LocalTime parsedStartTime = LocalTime.parse(startTimeField.getText().trim(), DateTimeFormatter.ofPattern("HH:mm"));
                 LocalTime parsedEndTime = LocalTime.parse(endTimeField.getText().trim(), DateTimeFormatter.ofPattern("HH:mm"));
                 if (parsedEndTime.isBefore(parsedStartTime)) {
                     JOptionPane.showMessageDialog(this, "End time cannot be before start time.", "Error", JOptionPane.ERROR_MESSAGE);
-                    return;
+                    startTime = null;
+                    return -1;
                 }
                 durationSeconds = Duration.between(parsedStartTime, parsedEndTime).getSeconds();
             } catch (DateTimeParseException ex) {
                 JOptionPane.showMessageDialog(this, "Invalid time format. Please enter time as HH:MM", "Format Error", JOptionPane.ERROR_MESSAGE);
-                return;
+                return -1;
             }
         }
-    
-        taskDurations.merge(taskName, durationSeconds, Long::sum);
-        pieDataset.setValue(taskName, taskDurations.get(taskName));
-        barDataset.setValue(taskDurations.get(taskName), "Time Spent", taskName);
-    
-            // Dropdown update logic - prevent duplicate entries
-        if (!arrayContains(taskNameDropdown, taskName)) {
-            taskNameDropdown.addItem(taskName);
-        }
-
-        // Assign a color to the new task
-        Color taskColor = taskColors.computeIfAbsent(taskName, k -> 
-            new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
-
-        // Update datasets and chart colors
-        updateDatasets(taskName, durationSeconds);
-        updateChartColors();
-
-        // Update history area
-        historyArea.append("Task: " + taskName + ", Duration: " + formatDuration(durationSeconds) + "\n");
+        return durationSeconds;
     }
+
 //Update Datasets
     private void updateDatasets(String taskName, long durationSeconds) {
         taskDurations.merge(taskName, durationSeconds, Long::sum);
@@ -265,8 +280,8 @@ private void updateChartColors() {
         barDataset.setValue(taskDurations.get(taskName), "Time Spent", taskName);
     }
 
+// Check if array contains item
 
-// Logic for checking if an item is already in the dropdown
     private boolean arrayContains(JComboBox<String> comboBox, String item) {
         for (int i = 0; i < comboBox.getItemCount(); i++) {
             if (comboBox.getItemAt(i).equalsIgnoreCase(item)) {
@@ -278,16 +293,11 @@ private void updateChartColors() {
 
 // Format duration in HH:MM:SS format
     private String formatDuration(long durationSeconds) {
-        // Converts duration to hours, minutes, and seconds format
         long hours = durationSeconds / 3600;
         long minutes = (durationSeconds % 3600) / 60;
         long seconds = durationSeconds % 60;
         return String.format("%02d:%02d:%02d", hours, minutes, seconds);
     }
-
-    
-    
-
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
